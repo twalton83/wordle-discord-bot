@@ -4,11 +4,13 @@ import (
 	"bufio"
 	"fmt"
 	"log"
+	"math/rand"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
-	"math/rand"
 	"time"
+
 	// "strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -17,6 +19,7 @@ import (
 
 var botPrefix = "?"
 var lines []string
+var wordOfTheDay string
 
 func main() {
 	envErr := godotenv.Load()
@@ -46,6 +49,8 @@ func main() {
 		fmt.Println("Error reading lines", err)
 		return
 	}
+	wordOfTheDay = pickWord(lines)
+	fmt.Print(wordOfTheDay)
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
@@ -54,12 +59,24 @@ func main() {
 }
 
 func messageCreate(session *discordgo.Session, m *discordgo.MessageCreate) {
+	parsedMessage := strings.Split(string(m.Content), " ")
+	fmt.Print(parsedMessage)
 	if m.Author.ID == session.State.User.ID || string(m.Content[0]) != botPrefix {
 		return
 	}
-	// session.ChannelMessageSend(m.ChannelID, "Hello World!")
-	if string(m.Content) == "?word" {
-		sendDailyWord(pickWord(lines), session, m.Message )
+
+	if parsedMessage[0] == "?word" {
+		sendDailyWord(wordOfTheDay, session, m.Message )
+	}
+ 
+	if parsedMessage[0] == "?guess" {
+		result := calculateGuess(parsedMessage[1])
+
+		if result {
+			session.ChannelMessageSend(m.ChannelID, "Correct!")
+		} else {
+			session.ChannelMessageSend(m.ChannelID, "Try again!")
+		}
 	}
 }
 
@@ -91,3 +108,17 @@ func readLines(path string) ([]string, error) {
 func sendDailyWord(word string, s *discordgo.Session, m *discordgo.Message){
 	s.ChannelMessageSend(m.ChannelID, word)
 }
+  
+func calculateGuess(guess string) bool {
+	// use a hashmap to store the status of each letter
+	guessArr := strings.Split(guess, "")
+	wordOfTheDayArr := strings.Split(wordOfTheDay, "")
+
+	for i, letter := range guessArr {
+		if(wordOfTheDayArr[i] != letter){
+			return false
+		}
+	}
+	return true
+}
+
