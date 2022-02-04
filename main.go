@@ -73,7 +73,6 @@ func messageCreate(session *discordgo.Session, m *discordgo.MessageCreate) {
  
 	if parsedMessage[0] == "?guess" {
 		result := calculateGuess(parsedMessage[1])
-		fmt.Print(result)
 		embed := generateEmbed(*m.Author, result, parsedMessage[1])
 		_, err := session.ChannelMessageSendEmbed(m.ChannelID, embed)
 
@@ -113,7 +112,7 @@ func sendDailyWord(word string, s *discordgo.Session, m *discordgo.Message){
 }
   
 type results struct {
-	result interface{}
+	incorrect bool
 	guessMap []int
 }
 
@@ -121,7 +120,7 @@ func calculateGuess(guess string) results{
 	guessArr := strings.Split(guess, "")
 	guessMap := validateLetters(guessArr)
 
-	res := results{result : guessMap.incorrect, guessMap: guessMap.stringPositionResults }
+	res := results{incorrect : guessMap.incorrect, guessMap: guessMap.stringPositionResults }
 
 	return res
 }
@@ -199,10 +198,10 @@ func validateLetters(guessArr []string) validationResults {
 
 func generateEmbed(user discordgo.User, result results, userGuess string) *discordgo.MessageEmbed {
 	var color int
-	if result.result == true {
-		color = 0x00ff00
-	} else {
+	if result.incorrect {
 		color = 0xff0000
+	} else {
+		color = 0x00ff00
 	}
 
 	emojis := createEmojiString(result.guessMap)
