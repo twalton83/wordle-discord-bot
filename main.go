@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"os"
 	"os/signal"
+	// "strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -14,6 +15,7 @@ import (
 	// "strings"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/enescakir/emoji"
 	"github.com/joho/godotenv"
 )
 
@@ -44,7 +46,7 @@ func main() {
 	}
 
 	fmt.Println("Bot is now running. Press CTRL-C to exit.")
-	lines, err = readLines("sgb-words.txt")
+	lines, err = readLines("test.txt")
 	if err != nil {
 		fmt.Println("Error reading lines", err)
 		return
@@ -60,10 +62,10 @@ func main() {
 
 func messageCreate(session *discordgo.Session, m *discordgo.MessageCreate) {
 	parsedMessage := strings.Split(string(m.Content), " ")
-	fmt.Print(parsedMessage)
 	if m.Author.ID == session.State.User.ID || string(m.Content[0]) != botPrefix {
 		return
 	}
+
 
 	if parsedMessage[0] == "?word" {
 		sendDailyWord(wordOfTheDay, session, m.Message )
@@ -71,11 +73,12 @@ func messageCreate(session *discordgo.Session, m *discordgo.MessageCreate) {
  
 	if parsedMessage[0] == "?guess" {
 		result := calculateGuess(parsedMessage[1])
+		fmt.Print(result)
+		embed := generateEmbed(*m.Author, result, parsedMessage[1])
+		_, err := session.ChannelMessageSendEmbed(m.ChannelID, embed)
 
-		if result {
-			session.ChannelMessageSend(m.ChannelID, "Correct!")
-		} else {
-			session.ChannelMessageSend(m.ChannelID, "Try again!")
+		if err != nil{
+			fmt.Print(err)
 		}
 	}
 }
@@ -109,42 +112,134 @@ func sendDailyWord(word string, s *discordgo.Session, m *discordgo.Message){
 	s.ChannelMessageSend(m.ChannelID, word)
 }
   
-func calculateGuess(guess string) bool{
+type results struct {
+	result interface{}
+	guessMap []int
+}
+
+func calculateGuess(guess string) results{
 	guessArr := strings.Split(guess, "")
 	guessMap := validateLetters(guessArr)
 
-	fmt.Print(guessMap)
+	res := results{result : guessMap.incorrect, guessMap: guessMap.stringPositionResults }
 
-	if guessMap["incorrect"] == true {
-
-		return false
-	} else {
-		return true
-	}
+	return res
 }
 
-func validateLetters(guessArr []string) map[string]interface{} {
-	validationMap := make(map[string]interface{})
+type wordPositions struct {
+		positions []int
+}
 
-	wordOfTheDayArr := strings.Split(wordOfTheDay, "")
+func generateWOODMap() map[string]wordPositions {
+	split := strings.Split(wordOfTheDay, "")
+	m := make(map[string]wordPositions)
+
+	// loop over word, push positions of letters to slice 
+	for i, letter := range split {
+		_, keyExists := m[letter]
+		if(!keyExists){
+		positionsArr := make([]int, 0)
+		positionsArr = append(positionsArr, i)
+			m[letter] = struct {
+				positions []int
+			}{
+				positions: positionsArr,
+			}
+		} else {
+			positionsArr := m[letter].positions
+			positionsArr = append(positionsArr, i)
+			m[letter] = struct {
+				positions []int
+			}{
+				positions: positionsArr,
+			}
+		}
+	}
+	return m
+}
+
+type validationResults struct {
+	stringPositionResults []int
+	incorrect bool
+}
+
+// TODO: if there's a guess with two of the same letters and only one instance exists, check for length of positions array. if it doesn't match the current, FAIL that position
+func validateLetters(guessArr []string) validationResults {
+	validationMap := validationResults{
+		stringPositionResults: make([]int, 0),
+		incorrect: false,
+	}
+	// this should create a map showing the different positions in a word
+	w := generateWOODMap()
+
 // 2 is assigned when the correct placement and letter
 // 1 is assigned when it's the correct letter
 // 0 is assigned when the letter is not present at all
-	for i, letter := range guessArr {
-		if(wordOfTheDayArr[i] != letter){
-			validationMap[letter] = 2
-		} else if (contains(wordOfTheDayArr, letter)) {
-			validationMap[letter] = 1
+	for currentLetterIndex, letter := range guessArr {
+		_, letterExists := w[letter]
+		if(letterExists){
+			// loop over letter's positions
+			for _, position := range w[letter].positions {
+				if(currentLetterIndex == position){
+					validationMap.stringPositionResults = append(validationMap.stringPositionResults, 2)
+					break
+				} else {
+					// If the letter does not match the position
+					validationMap.stringPositionResults = append(validationMap.stringPositionResults, 1)
+					break
+				}
+			}
 		} else {
-			validationMap[letter] =  0
-			validationMap["incorrect"] = true
+			validationMap.stringPositionResults = append(validationMap.stringPositionResults, 0)
+			validationMap.incorrect = true
 		}
 	}
 	return validationMap
 }
 
-func generateEmbed(){
-	
+func generateEmbed(user discordgo.User, result results, userGuess string) *discordgo.MessageEmbed {
+	var color int
+	if result.result == true {
+		color = 0x00ff00
+	} else {
+		color = 0xff0000
+	}
+
+	emojis := createEmojiString(result.guessMap)
+
+	embed := &discordgo.MessageEmbed{
+    Author:      &discordgo.MessageEmbedAuthor{},
+    Color:       color,
+    Description: user.Mention(),
+    Fields: []*discordgo.MessageEmbedField{
+			 {
+            Name:   "Your Guess",
+            Value:  userGuess,
+            Inline: false,
+        },
+        {
+            Name:   "Result",
+            Value:  emojis,
+            Inline: false,
+        },
+    },
+    Timestamp: time.Now().Format(time.RFC3339), 
+	}
+	return embed
+}
+
+func createEmojiString(guessMap []int) string {
+	var emojiString = ""
+	for _, value := range guessMap {
+		if(value == 2){
+			emojiString += emoji.GreenCircle.String()
+		} else if (value == 1){
+			emojiString += emoji.YellowCircle.String()
+		} else {
+			emojiString += emoji.WhiteCircle.String()
+		}
+	}
+	return emojiString
 }
 
 func contains(s []string, l string) bool {
@@ -155,4 +250,5 @@ func contains(s []string, l string) bool {
     }
     return false
 }
+
 

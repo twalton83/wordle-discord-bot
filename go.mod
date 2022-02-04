@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/bwmarrin/discordgo v0.23.2
+	github.com/enescakir/emoji v1.0.0
 	github.com/joho/godotenv v1.4.0
 )
 
