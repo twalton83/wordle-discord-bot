@@ -109,16 +109,50 @@ func sendDailyWord(word string, s *discordgo.Session, m *discordgo.Message){
 	s.ChannelMessageSend(m.ChannelID, word)
 }
   
-func calculateGuess(guess string) bool {
-	// use a hashmap to store the status of each letter
+func calculateGuess(guess string) bool{
 	guessArr := strings.Split(guess, "")
-	wordOfTheDayArr := strings.Split(wordOfTheDay, "")
+	guessMap := validateLetters(guessArr)
 
+	fmt.Print(guessMap)
+
+	if guessMap["incorrect"] == true {
+
+		return false
+	} else {
+		return true
+	}
+}
+
+func validateLetters(guessArr []string) map[string]interface{} {
+	validationMap := make(map[string]interface{})
+
+	wordOfTheDayArr := strings.Split(wordOfTheDay, "")
+// 2 is assigned when the correct placement and letter
+// 1 is assigned when it's the correct letter
+// 0 is assigned when the letter is not present at all
 	for i, letter := range guessArr {
 		if(wordOfTheDayArr[i] != letter){
-			return false
+			validationMap[letter] = 2
+		} else if (contains(wordOfTheDayArr, letter)) {
+			validationMap[letter] = 1
+		} else {
+			validationMap[letter] =  0
+			validationMap["incorrect"] = true
 		}
 	}
-	return true
+	return validationMap
+}
+
+func generateEmbed(){
+	
+}
+
+func contains(s []string, l string) bool {
+    for _, letter := range s {
+        if letter == l {
+            return true
+        }
+    }
+    return false
 }
 
